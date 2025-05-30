@@ -11,9 +11,23 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container
 builder.Services.AddControllers();
 
-// Register DbContext with SQLite
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite("Data Source=taskie.db"));
+{
+    var connectionString = builder.Environment.IsProduction()
+        ? Environment.GetEnvironmentVariable("DATABASE_URL")
+        : "Data Source=taskie.db"; // local SQLite fallback
+
+    if (builder.Environment.IsProduction())
+    {
+        // Convert Render-style DATABASE_URL to standard PostgreSQL format
+        connectionString = ConvertDatabaseUrl(connectionString!);
+        options.UseNpgsql(connectionString);
+    }
+    else
+    {
+        options.UseSqlite(connectionString);
+    }
+});
 
 // Register your services and repositories
 builder.Services.AddScoped<ITaskService, TaskService>();
@@ -53,6 +67,13 @@ builder.WebHost.UseUrls($"http://*:{port}");
 
 var app = builder.Build();
 
+// Automatically apply migrations in production
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
+
 // Use Swagger in development mode
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
@@ -68,3 +89,11 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+static string ConvertDatabaseUrl(string databaseUrl)
+{
+    var uri = new Uri(databaseUrl);
+    var userInfo = uri.UserInfo.Split(':');
+
+    return $"Host={uri.Host};Port={uri.Port};Username={userInfo[0]};Password={userInfo[1]};Database={uri.AbsolutePath.TrimStart('/')};SSL Mode=Require;Trust Server Certificate=true;";
+}
