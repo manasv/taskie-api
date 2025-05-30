@@ -1,0 +1,34 @@
+## .NET Core
+bin/
+obj/
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+## User-specific files
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Build results
+*.dll
+*.exe
+*.app
+*.pdb
+
+## EF Core Migrations cache
+Migrations/obj/
+
+## Environment files
+.env
+secrets.json
+
+## macOS files
+.DS_Store
+
+## Logs
+*.log
+logs/

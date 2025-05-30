@@ -1,0 +1,6 @@
+@TaskieAPI_HostAddress = http://localhost:5220
+
+GET {{TaskieAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
