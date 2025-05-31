@@ -8,30 +8,35 @@ using TaskieAPI.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container
 builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    var connectionString = builder.Environment.IsProduction()
-        ? Environment.GetEnvironmentVariable("DATABASE_URL")
-        : "Data Source=taskie.db"; // local SQLite fallback
+    var env = builder.Environment;
+    var rawUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
 
-    if (builder.Environment.IsProduction())
+    if (env.IsProduction() && !string.IsNullOrWhiteSpace(rawUrl))
     {
-        // Convert Render-style DATABASE_URL to standard PostgreSQL format
-        connectionString = ConvertDatabaseUrl(connectionString!);
+        var connectionString = ConvertDatabaseUrl(rawUrl);
         options.UseNpgsql(connectionString);
     }
     else
     {
-        options.UseSqlite(connectionString);
+        options.UseSqlite("Data Source=taskie.db");
     }
 });
-
-// Register your services and repositories
-builder.Services.AddScoped<ITaskService, TaskService>();
-builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 
 var jwtKey = Environment.GetEnvironmentVariable("JWT_SECRET")
              ?? builder.Configuration["Jwt:Key"];
@@ -42,58 +47,46 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey!)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ValidateIssuer = false,
             ValidateAudience = false
         };
     });
 
-builder.Services.AddCors(options =>
-{
-options.AddPolicy("AllowAll", policy =>
-{
-    policy.AllowAnyOrigin()
-          .AllowAnyMethod()
-          .AllowAnyHeader();
-});
-});
-
-// Add Swagger/OpenAPI
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddScoped<ITaskService, TaskService>();
+builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
 builder.WebHost.UseUrls($"http://*:{port}");
 
 var app = builder.Build();
 
-// Automatically apply migrations in production
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
-}
-
-// Use Swagger in development mode
+// Enable Swagger
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
 app.UseCors("AllowAll");
+
+app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
 
-static string ConvertDatabaseUrl(string databaseUrl)
+// === Utility Function ===
+static string ConvertDatabaseUrl(string url)
 {
-    var uri = new Uri(databaseUrl);
-    var userInfo = uri.UserInfo.Split(':');
+    var uri = new Uri(url);
+    var userInfo = uri.UserInfo.Split(':', 2);
+    var username = userInfo[0];
+    var password = userInfo[1];
+    var host = uri.Host;
+    var port = uri.Port > 0 ? uri.Port : 5432;
+    var db = uri.AbsolutePath.TrimStart('/');
 
-    return $"Host={uri.Host};Port={uri.Port};Username={userInfo[0]};Password={userInfo[1]};Database={uri.AbsolutePath.TrimStart('/')};SSL Mode=Require;Trust Server Certificate=true;";
+    return $"Host={host};Port={port};Username={username};Password={password};Database={db};SSL Mode=Require;Trust Server Certificate=true;";
 }
