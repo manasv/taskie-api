@@ -16,21 +16,18 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
     });
 });
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     var env = builder.Environment;
-    var rawUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+    var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
 
-    if (env.IsProduction() && !string.IsNullOrWhiteSpace(rawUrl))
+    if (env.IsProduction() && !string.IsNullOrEmpty(databaseUrl))
     {
-        var connectionString = ConvertDatabaseUrl(rawUrl);
-        options.UseNpgsql(connectionString);
+        options.UseNpgsql(ConvertDatabaseUrl(databaseUrl));
     }
     else
     {
@@ -39,7 +36,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 });
 
 var jwtKey = Environment.GetEnvironmentVariable("JWT_SECRET")
-             ?? builder.Configuration["Jwt:Key"];
+             ?? builder.Configuration["Jwt:Key"]
+             ?? "OhNoYouGotMyKey";
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -61,7 +59,6 @@ builder.WebHost.UseUrls($"http://*:{port}");
 
 var app = builder.Build();
 
-// Enable Swagger
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
     app.UseSwagger();
@@ -69,15 +66,19 @@ if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 }
 
 app.UseCors("AllowAll");
-
-app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+// Auto-migrate DB
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
+
 app.Run();
 
-// === Utility Function ===
 static string ConvertDatabaseUrl(string url)
 {
     var uri = new Uri(url);

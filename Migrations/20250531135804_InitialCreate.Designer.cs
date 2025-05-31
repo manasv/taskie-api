@@ -10,7 +10,7 @@ using TaskieAPI.Data;
 namespace TaskieAPI.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250530023700_InitialCreate")]
+    [Migration("20250531135804_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -38,6 +38,25 @@ namespace TaskieAPI.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("TaskItems");
+                });
+
+            modelBuilder.Entity("TaskieAPI.Models.User", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Users");
                 });
 #pragma warning restore 612, 618
         }
